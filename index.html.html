@@ -1,0 +1,765 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>AI Invoice Scanner</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root {
+    --bg: #f5f0e8;
+    --paper: #fdfaf4;
+    --ink: #1a1612;
+    --ink-light: #6b6259;
+    --accent: #c8410a;
+    --accent2: #2a6b3f;
+    --border: #d9d0c0;
+    --shadow: rgba(26,22,18,0.1);
+    --stamp: #c8410a;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'DM Sans', sans-serif;
+    min-height: 100vh;
+    background-image:
+      radial-gradient(circle at 20% 50%, rgba(200,65,10,0.04) 0%, transparent 50%),
+      radial-gradient(circle at 80% 20%, rgba(42,107,63,0.04) 0%, transparent 50%);
+  }
+
+  /* Paper texture overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .container {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 40px 24px;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* Header */
+  header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    margin-bottom: 40px;
+    padding-bottom: 24px;
+    border-bottom: 2px solid var(--ink);
+  }
+
+  .brand {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .brand-tag {
+    font-size: 0.65rem;
+    font-weight: 500;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-family: 'Syne', sans-serif;
+  }
+
+  h1 {
+    font-family: 'Syne', sans-serif;
+    font-size: 2.4rem;
+    font-weight: 800;
+    line-height: 1;
+    letter-spacing: -0.03em;
+    color: var(--ink);
+  }
+
+  h1 span { color: var(--accent); }
+
+  .header-badge {
+    background: var(--ink);
+    color: var(--bg);
+    font-family: 'Syne', sans-serif;
+    font-size: 0.65rem;
+    font-weight: 600;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    padding: 6px 12px;
+    border-radius: 2px;
+    margin-top: 8px;
+  }
+
+  /* Main layout */
+  .main-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    margin-bottom: 24px;
+  }
+
+  @media (max-width: 640px) {
+    .main-grid { grid-template-columns: 1fr; }
+    h1 { font-size: 1.8rem; }
+  }
+
+  /* Upload panel */
+  .panel {
+    background: var(--paper);
+    border: 1.5px solid var(--border);
+    border-radius: 4px;
+    padding: 24px;
+    box-shadow: 4px 4px 0px var(--border);
+  }
+
+  .panel-label {
+    font-family: 'Syne', sans-serif;
+    font-size: 0.6rem;
+    font-weight: 600;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--ink-light);
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .panel-label::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  #upload-zone {
+    border: 2px dashed var(--border);
+    border-radius: 4px;
+    padding: 32px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: var(--bg);
+    min-height: 200px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+  }
+
+  #upload-zone:hover, #upload-zone.dragover {
+    border-color: var(--accent);
+    background: rgba(200,65,10,0.03);
+  }
+
+  #upload-zone.uploaded { border-style: solid; border-color: var(--accent2); }
+
+  .upload-icon {
+    font-size: 2.5rem;
+    opacity: 0.5;
+  }
+
+  .upload-title {
+    font-family: 'Syne', sans-serif;
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: var(--ink);
+  }
+
+  .upload-sub {
+    font-size: 0.72rem;
+    color: var(--ink-light);
+    line-height: 1.5;
+  }
+
+  #file-input { display: none; }
+
+  #preview-img {
+    width: 100%;
+    max-height: 220px;
+    object-fit: contain;
+    border-radius: 2px;
+    display: none;
+  }
+
+  /* Scan button */
+  #scan-btn {
+    width: 100%;
+    margin-top: 16px;
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 14px;
+    font-family: 'Syne', sans-serif;
+    font-size: 0.85rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    box-shadow: 3px 3px 0px rgba(200,65,10,0.3);
+  }
+
+  #scan-btn:hover { transform: translate(-1px, -1px); box-shadow: 4px 4px 0px rgba(200,65,10,0.3); }
+  #scan-btn:active { transform: translate(1px, 1px); box-shadow: 1px 1px 0px rgba(200,65,10,0.3); }
+  #scan-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+  /* Results panel */
+  #results-panel {
+    background: var(--paper);
+    border: 1.5px solid var(--border);
+    border-radius: 4px;
+    padding: 24px;
+    box-shadow: 4px 4px 0px var(--border);
+    min-height: 300px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .empty-results {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    color: var(--ink-light);
+    text-align: center;
+  }
+
+  .empty-results .icon { font-size: 2rem; opacity: 0.3; }
+  .empty-results p { font-size: 0.75rem; line-height: 1.6; max-width: 180px; }
+
+  /* Extracted data table */
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.78rem;
+  }
+
+  .data-table th {
+    font-family: 'Syne', sans-serif;
+    font-size: 0.6rem;
+    font-weight: 600;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--ink-light);
+    text-align: left;
+    padding: 6px 8px;
+    border-bottom: 1.5px solid var(--ink);
+  }
+
+  .data-table td {
+    padding: 8px 8px;
+    border-bottom: 1px solid var(--border);
+    color: var(--ink);
+    vertical-align: top;
+  }
+
+  .data-table td:first-child {
+    font-weight: 500;
+    color: var(--ink-light);
+    font-size: 0.7rem;
+    white-space: nowrap;
+    width: 35%;
+  }
+
+  .data-table td:last-child { font-weight: 400; }
+
+  .total-row td {
+    font-family: 'Syne', sans-serif;
+    font-weight: 700 !important;
+    color: var(--accent) !important;
+    border-top: 1.5px solid var(--ink);
+    border-bottom: none;
+    font-size: 0.85rem !important;
+  }
+
+  /* Items section */
+  .items-section {
+    margin-top: 16px;
+  }
+
+  .items-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 0.6rem;
+    font-weight: 600;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--ink-light);
+    margin-bottom: 8px;
+  }
+
+  .item-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 0;
+    border-bottom: 1px dashed var(--border);
+    font-size: 0.76rem;
+    gap: 8px;
+  }
+
+  .item-name { flex: 1; color: var(--ink); }
+  .item-qty { color: var(--ink-light); font-size: 0.7rem; min-width: 30px; text-align: center; }
+  .item-price { font-weight: 500; color: var(--ink); min-width: 60px; text-align: right; }
+
+  /* Processing state */
+  .processing {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+  }
+
+  .scan-animation {
+    width: 60px;
+    height: 60px;
+    border: 2px solid var(--border);
+    border-radius: 4px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .scan-line {
+    position: absolute;
+    left: 0; right: 0;
+    height: 2px;
+    background: var(--accent);
+    animation: scan 1.5s ease-in-out infinite;
+    box-shadow: 0 0 8px var(--accent);
+  }
+
+  @keyframes scan {
+    0% { top: 0; }
+    100% { top: 100%; }
+  }
+
+  .processing p {
+    font-family: 'Syne', sans-serif;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--ink-light);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  /* Export section */
+  #export-section {
+    background: var(--paper);
+    border: 1.5px solid var(--border);
+    border-radius: 4px;
+    padding: 20px 24px;
+    box-shadow: 4px 4px 0px var(--border);
+    display: none;
+  }
+
+  .export-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 12px;
+    margin-top: 12px;
+  }
+
+  @media (max-width: 640px) { .export-grid { grid-template-columns: 1fr; } }
+
+  .export-btn {
+    padding: 12px 16px;
+    border-radius: 4px;
+    font-family: 'Syne', sans-serif;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    border: 1.5px solid;
+  }
+
+  .export-btn.excel {
+    background: var(--accent2);
+    color: white;
+    border-color: var(--accent2);
+    box-shadow: 3px 3px 0px rgba(42,107,63,0.3);
+  }
+
+  .export-btn.excel:hover { transform: translate(-1px,-1px); box-shadow: 4px 4px 0px rgba(42,107,63,0.3); }
+
+  .export-btn.csv {
+    background: transparent;
+    color: var(--ink);
+    border-color: var(--border);
+    box-shadow: 3px 3px 0px var(--border);
+  }
+
+  .export-btn.csv:hover { transform: translate(-1px,-1px); border-color: var(--ink); }
+
+  .export-btn.new-scan {
+    background: var(--ink);
+    color: var(--bg);
+    border-color: var(--ink);
+    box-shadow: 3px 3px 0px rgba(26,22,18,0.3);
+  }
+
+  .export-btn.new-scan:hover { transform: translate(-1px,-1px); }
+
+  /* Stamp */
+  .stamp {
+    position: absolute;
+    top: -10px;
+    right: -10px;
+    width: 70px;
+    height: 70px;
+    border: 3px solid var(--accent2);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Syne', sans-serif;
+    font-size: 0.5rem;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--accent2);
+    text-align: center;
+    line-height: 1.3;
+    transform: rotate(15deg);
+    opacity: 0;
+    transition: opacity 0.5s;
+  }
+
+  .stamp.show { opacity: 1; }
+
+  #results-wrapper { position: relative; }
+
+  /* Confidence badge */
+  .confidence {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: rgba(42,107,63,0.1);
+    color: var(--accent2);
+    border: 1px solid rgba(42,107,63,0.2);
+    border-radius: 20px;
+    padding: 3px 10px;
+    font-size: 0.65rem;
+    font-weight: 500;
+    margin-left: auto;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <div class="brand">
+      <div class="brand-tag">AI-Powered · Computer Vision</div>
+      <h1>Invoice <span>&</span> Receipt<br>Scanner</h1>
+    </div>
+    <div class="header-badge">Claude Vision API</div>
+  </header>
+
+  <div class="main-grid">
+    <!-- Upload Panel -->
+    <div class="panel">
+      <div class="panel-label">01 · Upload Document</div>
+      <div id="upload-zone" onclick="document.getElementById('file-input').click()">
+        <img id="preview-img" alt="preview"/>
+        <div id="upload-content">
+          <div class="upload-icon">🧾</div>
+          <div class="upload-title">Drop your invoice or receipt</div>
+          <div class="upload-sub">Supports JPG, PNG, PDF photos<br>Any invoice, receipt, or bill</div>
+        </div>
+      </div>
+      <input type="file" id="file-input" accept="image/*"/>
+      <button id="scan-btn" onclick="scanInvoice()" disabled>
+        <span>🔍</span> Scan & Extract Data
+      </button>
+    </div>
+
+    <!-- Results Panel -->
+    <div id="results-wrapper">
+      <div id="results-panel" class="panel">
+        <div class="panel-label">02 · Extracted Data</div>
+        <div class="empty-results" id="empty-results">
+          <div class="icon">📋</div>
+          <p>Upload an invoice and click scan to extract data automatically</p>
+        </div>
+        <div id="extracted-data" style="display:none; flex:1; flex-direction:column;">
+        </div>
+      </div>
+      <div class="stamp" id="stamp">✓ Data<br>Extracted</div>
+    </div>
+  </div>
+
+  <!-- Export Section -->
+  <div id="export-section">
+    <div class="panel-label">03 · Export Data</div>
+    <div class="export-grid">
+      <button class="export-btn excel" onclick="exportExcel()">📊 Download Excel</button>
+      <button class="export-btn csv" onclick="exportCSV()">📄 Download CSV</button>
+      <button class="export-btn new-scan" onclick="resetScanner()">🔄 Scan Another</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  let imageBase64 = '';
+  let extractedJSON = null;
+
+  const uploadZone = document.getElementById('upload-zone');
+  const fileInput = document.getElementById('file-input');
+
+  uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('dragover'); });
+  uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('dragover'));
+  uploadZone.addEventListener('drop', e => {
+    e.preventDefault();
+    uploadZone.classList.remove('dragover');
+    if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+  });
+  fileInput.addEventListener('change', e => { if (e.target.files[0]) handleFile(e.target.files[0]); });
+
+  function handleFile(file) {
+    const reader = new FileReader();
+    reader.onload = e => {
+      imageBase64 = e.target.result.split(',')[1];
+      const preview = document.getElementById('preview-img');
+      preview.src = e.target.result;
+      preview.style.display = 'block';
+      document.getElementById('upload-content').style.display = 'none';
+      uploadZone.classList.add('uploaded');
+      document.getElementById('scan-btn').disabled = false;
+    };
+    reader.readAsDataURL(file);
+  }
+
+  async function scanInvoice() {
+    if (!imageBase64) return;
+
+    document.getElementById('scan-btn').disabled = true;
+    document.getElementById('empty-results').style.display = 'none';
+    document.getElementById('extracted-data').style.display = 'none';
+
+    // Show processing state
+    const resultsPanel = document.getElementById('results-panel');
+    const processing = document.createElement('div');
+    processing.className = 'processing';
+    processing.id = 'processing';
+    processing.innerHTML = `
+      <div class="scan-animation"><div class="scan-line"></div></div>
+      <p>Reading document...</p>
+    `;
+    resultsPanel.appendChild(processing);
+
+    const prompt = `You are an expert invoice and receipt data extractor. Analyze this invoice/receipt image and extract ALL data.
+
+Return ONLY a valid JSON object with this exact structure (no markdown, no explanation):
+{
+  "vendor": "Company/Store name",
+  "date": "Date of invoice/receipt",
+  "invoice_number": "Invoice or receipt number if present, else null",
+  "subtotal": "Subtotal amount as string with currency symbol",
+  "tax": "Tax amount as string with currency symbol, else null",
+  "total": "Total amount as string with currency symbol",
+  "payment_method": "Payment method if shown, else null",
+  "currency": "Currency code (USD, INR, etc)",
+  "items": [
+    {
+      "name": "Item name",
+      "quantity": "Quantity as string",
+      "unit_price": "Unit price as string with currency",
+      "total_price": "Total price as string with currency"
+    }
+  ],
+  "notes": "Any other relevant info like address, phone, tax ID"
+}
+
+If any field is not visible, use null. Extract every line item you can see.`;
+
+    try {
+      const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 1000,
+          messages: [{
+            role: 'user',
+            content: [
+              {
+                type: 'image',
+                source: { type: 'base64', media_type: 'image/jpeg', data: imageBase64 }
+              },
+              { type: 'text', text: prompt }
+            ]
+          }]
+        })
+      });
+
+      const data = await response.json();
+      let text = data.content.map(b => b.text || '').join('');
+      text = text.replace(/```json|```/g, '').trim();
+      extractedJSON = JSON.parse(text);
+
+      document.getElementById('processing').remove();
+      renderResults(extractedJSON);
+
+    } catch (err) {
+      document.getElementById('processing').remove();
+      document.getElementById('empty-results').style.display = 'flex';
+      document.getElementById('empty-results').innerHTML = `<div class="icon">⚠️</div><p>Could not read the document. Please try a clearer image.</p>`;
+      document.getElementById('scan-btn').disabled = false;
+      console.error(err);
+    }
+  }
+
+  function renderResults(data) {
+    const container = document.getElementById('extracted-data');
+    container.style.display = 'flex';
+
+    const fields = [
+      ['Vendor / Store', data.vendor],
+      ['Date', data.date],
+      ['Invoice #', data.invoice_number],
+      ['Payment Method', data.payment_method],
+      ['Notes', data.notes],
+    ].filter(f => f[1] && f[1] !== 'null');
+
+    let html = `<table class="data-table">
+      <thead><tr><th>Field</th><th>Value <span class="confidence">✓ AI Extracted</span></th></tr></thead>
+      <tbody>`;
+
+    fields.forEach(([k, v]) => {
+      html += `<tr><td>${k}</td><td>${v}</td></tr>`;
+    });
+
+    html += `<tr><td>Subtotal</td><td>${data.subtotal || '—'}</td></tr>`;
+    if (data.tax) html += `<tr><td>Tax</td><td>${data.tax}</td></tr>`;
+    html += `<tr class="total-row"><td>TOTAL</td><td>${data.total || '—'}</td></tr>`;
+    html += `</tbody></table>`;
+
+    if (data.items && data.items.length > 0) {
+      html += `<div class="items-section">
+        <div class="items-title">Line Items (${data.items.length})</div>`;
+      data.items.forEach(item => {
+        html += `<div class="item-row">
+          <span class="item-name">${item.name || '—'}</span>
+          <span class="item-qty">×${item.quantity || '1'}</span>
+          <span class="item-price">${item.total_price || item.unit_price || '—'}</span>
+        </div>`;
+      });
+      html += `</div>`;
+    }
+
+    container.innerHTML = html;
+
+    // Show stamp and export
+    document.getElementById('stamp').classList.add('show');
+    document.getElementById('export-section').style.display = 'block';
+    document.getElementById('scan-btn').disabled = false;
+  }
+
+  function exportExcel() {
+    if (!extractedJSON) return;
+    const d = extractedJSON;
+
+    const wb = XLSX.utils.book_new();
+
+    // Summary sheet
+    const summaryData = [
+      ['AI Invoice Scanner — Extracted Data', ''],
+      ['', ''],
+      ['INVOICE SUMMARY', ''],
+      ['Vendor', d.vendor || ''],
+      ['Date', d.date || ''],
+      ['Invoice Number', d.invoice_number || ''],
+      ['Payment Method', d.payment_method || ''],
+      ['Currency', d.currency || ''],
+      ['', ''],
+      ['AMOUNTS', ''],
+      ['Subtotal', d.subtotal || ''],
+      ['Tax', d.tax || ''],
+      ['TOTAL', d.total || ''],
+      ['', ''],
+      ['NOTES', d.notes || ''],
+    ];
+    const ws1 = XLSX.utils.aoa_to_sheet(summaryData);
+    ws1['!cols'] = [{ wch: 20 }, { wch: 35 }];
+    XLSX.utils.book_append_sheet(wb, ws1, 'Summary');
+
+    // Items sheet
+    if (d.items && d.items.length > 0) {
+      const itemsData = [
+        ['Item Name', 'Quantity', 'Unit Price', 'Total Price'],
+        ...d.items.map(i => [i.name || '', i.quantity || '', i.unit_price || '', i.total_price || ''])
+      ];
+      const ws2 = XLSX.utils.aoa_to_sheet(itemsData);
+      ws2['!cols'] = [{ wch: 35 }, { wch: 12 }, { wch: 15 }, { wch: 15 }];
+      XLSX.utils.book_append_sheet(wb, ws2, 'Line Items');
+    }
+
+    XLSX.writeFile(wb, `Invoice_${d.vendor || 'Scan'}_${d.date || 'data'}.xlsx`.replace(/[^a-zA-Z0-9_\-\.]/g, '_'));
+  }
+
+  function exportCSV() {
+    if (!extractedJSON) return;
+    const d = extractedJSON;
+    let csv = 'Field,Value\n';
+    csv += `Vendor,${d.vendor || ''}\n`;
+    csv += `Date,${d.date || ''}\n`;
+    csv += `Invoice Number,${d.invoice_number || ''}\n`;
+    csv += `Subtotal,${d.subtotal || ''}\n`;
+    csv += `Tax,${d.tax || ''}\n`;
+    csv += `Total,${d.total || ''}\n`;
+    csv += `Payment Method,${d.payment_method || ''}\n\n`;
+    if (d.items && d.items.length > 0) {
+      csv += 'Item Name,Quantity,Unit Price,Total Price\n';
+      d.items.forEach(i => {
+        csv += `${i.name || ''},${i.quantity || ''},${i.unit_price || ''},${i.total_price || ''}\n`;
+      });
+    }
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `Invoice_${d.vendor || 'scan'}.csv`.replace(/[^a-zA-Z0-9_\-\.]/g, '_');
+    a.click();
+  }
+
+  function resetScanner() {
+    imageBase64 = '';
+    extractedJSON = null;
+    document.getElementById('preview-img').style.display = 'none';
+    document.getElementById('preview-img').src = '';
+    document.getElementById('upload-content').style.display = 'flex';
+    uploadZone.classList.remove('uploaded');
+    document.getElementById('scan-btn').disabled = true;
+    document.getElementById('empty-results').style.display = 'flex';
+    document.getElementById('empty-results').innerHTML = `<div class="icon">📋</div><p>Upload an invoice and click scan to extract data automatically</p>`;
+    document.getElementById('extracted-data').style.display = 'none';
+    document.getElementById('extracted-data').innerHTML = '';
+    document.getElementById('stamp').classList.remove('show');
+    document.getElementById('export-section').style.display = 'none';
+    fileInput.value = '';
+  }
+</script>
+</body>
+</html>
