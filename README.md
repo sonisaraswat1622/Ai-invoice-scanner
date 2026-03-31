@@ -1,3 +1,7 @@
+https://sonisaraswat1622.github.io/Ai-invoice-scanner/
+
+
+
 AI Invoice & Receipt Scanner
 An AI-powered computer vision tool that eliminates manual invoice data entry
 Built with the Claude Vision API, this browser-based app reads any invoice or receipt image and instantly extracts structured financial data, exporting it directly to Excel or CSV in seconds.
